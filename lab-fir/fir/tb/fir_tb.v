@@ -153,8 +153,8 @@ reg [31:0]  data_length;
 integer Din, golden, input_data, golden_data, m;
 initial begin
     data_length = 0;
-    Din = $fopen("./fir/samples_triangular_wave.dat","r");
-    golden = $fopen("./fir/out_gold.dat","r");
+    Din = $fopen("../fir/samples_triangular_wave.dat","r");
+    golden = $fopen("../fir/out_gold.dat","r");
     for(m=0;m<Data_Num;m=m+1) begin
         input_data = $fscanf(Din,"%d", Din_list[m]);
         golden_data = $fscanf(golden,"%d", golden_list[m]);
@@ -178,7 +178,7 @@ initial begin
     ss(Din_list[(Data_Num-1)]);
     $display("------End the data input(AXI-Stream)------");
 end
-
+reg error_coef;
 integer k;
 reg error;
 reg status_error;
@@ -231,7 +231,7 @@ initial begin
     coef[10] =  32'd0;
 end
 
-reg error_coef;
+
 initial begin
     error_coef = 0;
     $display("----Start the coefficient input(AXI-lite)----");

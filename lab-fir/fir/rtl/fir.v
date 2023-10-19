@@ -56,6 +56,8 @@ reg ap_start_sig;
 reg     sm_tlast_r;
 reg     ss_finish_r;
 wire    ss_finish;
+reg ctrl_tap_ready_r, tap_EN_sr_r, tap_EN_r_d;
+wire ctrl_tap_ready, ctrl_tap_valid, muxsel, ffen;
 //state module
 always @( posedge axis_clk ) begin
     if ( !axis_rst_n ) begin
@@ -222,8 +224,7 @@ assign ss_write_valid = ~ ss_read_valid;
 
 //AXI4_Stream read
 
-reg ctrl_tap_ready_r, tap_EN_sr_r, tap_EN_r_d;
-wire ctrl_tap_ready, ctrl_tap_valid, muxsel, ffen;
+
 
 
 reg [pADDR_WIDTH-1:0] tap_RA_lr_r, tap_RA_sr_r;
