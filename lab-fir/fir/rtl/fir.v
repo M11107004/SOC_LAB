@@ -1,7 +1,4 @@
-`timescale 1ns/1ns
-
-
-
+`timescale 1ns/1ns// Linux makefile timescale
 module fir
        #(  parameter pADDR_WIDTH = 12,
            parameter pDATA_WIDTH = 32,
@@ -59,7 +56,7 @@ reg ap_start_sig;
 reg     sm_tlast_r;
 reg     ss_finish_r;
 wire    ss_finish;
-//state
+//state module
 always @( posedge axis_clk ) begin
     if ( !axis_rst_n ) begin
         state <= ready;
@@ -231,6 +228,55 @@ wire ctrl_tap_ready, ctrl_tap_valid, muxsel, ffen;
 
 reg [pADDR_WIDTH-1:0] tap_RA_lr_r, tap_RA_sr_r;
 wire [pADDR_WIDTH-1:0]  ctrl_tap_addr, ctrl_data_addr;
+wire [3:0] ctrl_count;
+
+//control module
+wire en;
+reg o_valid_r, ffen_r;
+reg[3:0] count_r;
+reg [pADDR_WIDTH-1:0]tap_last_addr_r;
+reg [pADDR_WIDTH-1:0]o_data_addr_r, o_tap_addr_r;
+
+
+assign ctrl_tap_valid = o_valid_r;
+assign ctrl_data_addr = o_data_addr_r;
+assign ctrl_tap_addr = o_tap_addr_r;
+assign ctrl_count = count_r;
+assign ffen = ffen_r;
+assign muxsel = ~ffen ;
+assign en = ctrl_tap_ready & ctrl_tap_valid;
+
+
+
+always@(posedge axis_clk) begin
+    if (!axis_rst_n) begin
+        o_data_addr_r <= 0;
+        o_tap_addr_r <= 12'd40;
+        ffen_r <= 0;
+        o_valid_r <= 0;
+        count_r <= 0;
+    end
+    else if(en) begin
+        o_valid_r       <= (ctrl_count == 4'd11) ? 0 : 1;
+
+        o_data_addr_r   <= (ctrl_count == 4'd11)? 0:o_data_addr_r + 4;
+
+        o_tap_addr_r    <= (ctrl_count == 4'd11) ? tap_last_addr_r :(ctrl_tap_addr == 12'd40) ? 0 : ctrl_tap_addr + 4;
+
+        tap_last_addr_r <= (ctrl_count == 0 && ctrl_tap_addr == 0) ? 12'd40 :(ctrl_count == 0) ? ctrl_tap_addr - 4 : tap_last_addr_r;
+
+        count_r <= (ctrl_count == 4'd11) ? 0 :ctrl_count + 1;
+
+        ffen_r <= 1;
+    end
+    else begin
+        o_valid_r <= 1;
+        ffen_r <= 0;
+    end
+end
+
+//AXI4_Stream read
+
 
 always @( posedge axis_clk ) begin
     if ( !axis_rst_n ) begin
@@ -249,19 +295,17 @@ always @( posedge axis_clk ) begin
 
                 start: begin
                     if(ss_read_valid && ctrl_tap_valid) begin
-                        sm_tvalid_r <= 0;
-                        data_EN_sr_r <= 1;
-                        tap_EN_sr_r <= 1;
-
-                        data_RA_r <= ctrl_data_addr;
-                        tap_RA_sr_r <= ctrl_tap_addr;
-
-                        ctrl_tap_ready_r <= 1;
+                        sm_tvalid_r     <= 0;
+                        data_EN_sr_r    <= 1;
+                        tap_EN_sr_r     <= 1;
+                        data_RA_r       <= ctrl_data_addr;
+                        tap_RA_sr_r     <= ctrl_tap_addr;
+                        ctrl_tap_ready_r<= 1;
 
                     end
                     else if (ss_read_valid && !ctrl_tap_valid) begin
-                        sm_tvalid_r <= 1;
-                        ctrl_tap_ready_r <= 0 ;
+                        sm_tvalid_r     <= 1;
+                        ctrl_tap_ready_r<= 0 ;
 
                     end
                 end
@@ -292,8 +336,6 @@ always@(posedge axis_clk) begin
 
 end
 
-//caculate fir
-
 
 reg [pDATA_WIDTH-1:0] old_ram_data_r, old_cof_data_r;
 wire [pDATA_WIDTH-1:0] old_ram_data, old_cof_data;
@@ -307,7 +349,7 @@ assign old_cof_data = old_cof_data_r;
 assign new_cof_data = tap_Do;
 assign new_ram_data = data_Do;
 
-//caculate fir
+
 always@(posedge axis_clk) begin
     if(ffen) begin
         old_ram_data_r <= new_ram_data;
@@ -318,7 +360,7 @@ end
 
 assign ctrl_tap_ready = ctrl_tap_ready_r;
 
-wire [3:0] ctrl_count;
+
 
 
 
@@ -466,84 +508,6 @@ always @( posedge axis_clk ) begin
     end
 end
 
-//caculate fir
-control#(
-        .ADDR_W(pADDR_WIDTH)
-    )ctrl_tap (
-        .i_clk(axis_clk),
-        .i_rst_n(axis_rst_n),
-        .i_ready(ctrl_tap_ready),
-        .o_valid(ctrl_tap_valid),
-        .o_data_addr(ctrl_data_addr),
-        .o_tap_addr(ctrl_tap_addr),
-        .muxsel(muxsel),
-        .ffen(ffen),
-        .count(ctrl_count)
-    );
 endmodule
 
-
-
-module control
-    #(
-        parameter ADDR_W = 12
-    )(
-        input                     i_clk,
-        input                     i_rst_n,
-        input                     i_ready,
-        output                    o_valid,
-        output      [ADDR_W-1:0]  o_data_addr,
-        output      [ADDR_W-1:0]  o_tap_addr,
-        output                    muxsel,
-        output                    ffen,
-        output      [3:0]         count
-    );
-
-wire en;
-reg o_valid_r, ffen_r;
-reg [ADDR_W-1:0]o_data_addr_r, o_tap_addr_r;
-
-
-assign o_valid = o_valid_r;
-assign o_data_addr = o_data_addr_r;
-assign o_tap_addr = o_tap_addr_r;
-assign ffen = ffen_r;
-assign muxsel = ~ffen ;
-assign en = i_ready & o_valid;
-
-//wire[3:0] count;
-reg[3:0] count_r;
-assign count = count_r;
-
-reg [ADDR_W-1:0]tap_last_addr_r;
-
-always@(posedge i_clk) begin
-    if (!i_rst_n) begin
-        o_data_addr_r <= 0;
-        o_tap_addr_r <= 12'd40;
-        ffen_r <= 0;
-        o_valid_r <= 0;
-        count_r <= 0;
-    end
-    else if(en) begin
-        o_valid_r <= (count == 4'd11) ? 0 : 1;
-
-        o_data_addr_r <= (count == 4'd11)? 0:o_data_addr_r + 4;
-
-        o_tap_addr_r <= (count == 4'd11) ? tap_last_addr_r :
-                     (o_tap_addr == 12'd40) ? 0 : o_tap_addr + 4;
-
-        tap_last_addr_r <= (count == 0 && o_tap_addr == 0) ? 12'd40 :
-                        (count == 0) ? o_tap_addr - 4 : tap_last_addr_r;
-
-        count_r <= (count == 4'd11) ? 0 :count + 1;
-
-        ffen_r <= 1;
-    end
-    else begin
-        o_valid_r <= 1;
-        ffen_r <= 0;
-    end
-end
-endmodule
 
